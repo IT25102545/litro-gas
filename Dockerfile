@@ -11,8 +11,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: runtime
-FROM node:18-alpine AS runtime
+# Stage 2: final
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -24,6 +24,6 @@ RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server.js ./server.js
 
-EXPOSE 3000
+EXPOSE 3001
 
 CMD ["node", "server.js"]
