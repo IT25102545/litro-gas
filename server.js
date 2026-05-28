@@ -117,7 +117,7 @@ io.on('connection', (socket) => {
 });
 
 // Catch-all: serve index.html for React Router routes
-app.get('*', (req, res) => {
+app.get(/^.*$/, (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
