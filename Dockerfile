@@ -1,29 +1,15 @@
-# Stage 1: build
-FROM node:18-alpine AS build
-
-WORKDIR /app
-
-# Copy package files and install all dependencies (including devDependencies)
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Copy source and build the Vite frontend
-COPY . .
-RUN npm run build
-
-# Stage 2: final
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files and install production dependencies only
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY package*.json ./
 
-# Copy built frontend and Express server from build stage
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/server.js ./server.js
+RUN npm install
+
+COPY . .
+
+RUN npm run build
 
 EXPOSE 3001
 
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
