@@ -11,14 +11,15 @@
 #include "freertos/queue.h"
 
 // ─── CONFIGURE THESE ─────────────────────────────────────────────────────────
-#define WIFI_SSID           "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD       "YOUR_WIFI_PASSWORD"
+// Put the exact name and password of the WiFi router in the warehouse
+#define WIFI_SSID           "LITRO_WAREHOUSE_WIFI"
+#define WIFI_PASSWORD       "WarehousePass123"
 
-// Railway production URL — or use "http://192.168.x.x:3001" for local
-#define SERVER_URL          "http://litro-gas-production.up.railway.app"
+// The local IP address of the Warehouse PC running LitroServer.exe
+#define SERVER_URL          "http://192.168.1.100:3001"
 
-// Must match BOARD_API_KEY in your server's .env file
-#define BOARD_API_KEY       "change-this-to-a-secret-key-before-going-live"
+// Must match BOARD_API_KEY in the server's .env file
+#define BOARD_API_KEY       "LITRO_SECURE_KEY_2024"
 
 // Bay 5 = Unloading bay for this board
 #define BAY_ID              5
