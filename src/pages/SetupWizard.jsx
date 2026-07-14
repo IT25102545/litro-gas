@@ -45,7 +45,7 @@ export default function SetupWizard() {
       const res = await fetch('/api/setup/flash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ssid, password, comPort })
+        body: JSON.stringify({ ssid, password, comPort, serverIp: localIp })
       });
       const data = await res.json();
       if (data.error) {
@@ -77,13 +77,20 @@ export default function SetupWizard() {
           </div>
 
           <form onSubmit={handleFlash} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Auto-detected IP */}
-            <div style={{ background: '#f1f5f9', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <MapPin size={24} color="#3b82f6" />
-              <div>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>Local Server IP (Auto-Detected)</div>
-                <div style={{ fontSize: '18px', color: '#0f172a', fontWeight: 700 }}>{localIp}</div>
-              </div>
+            {/* Editable Server IP */}
+            <div style={{ background: '#f1f5f9', padding: '16px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <MapPin size={14} color="#3b82f6" /> Warehouse PC IP Address
+              </label>
+              <input 
+                value={localIp} 
+                onChange={e => setLocalIp(e.target.value)} 
+                required 
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '16px', fontWeight: 700, color: '#0f172a', boxSizing: 'border-box' }} 
+              />
+              <p style={{ margin: '8px 0 0 0', fontSize: '11px', color: '#94a3b8' }}>
+                * Auto-detected from this PC. If you are flashing from your laptop, change this to the IP of the Warehouse PC!
+              </p>
             </div>
 
             <div>
