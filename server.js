@@ -4,9 +4,11 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import Database from 'better-sqlite3';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import os from 'os';
 
 dotenv.config();
 
@@ -299,6 +301,90 @@ const requireLicenseForBoard = (req, res, next) => {
   }
   next();
 };
+
+// ═══════════════════════════════════════════════════════════════
+// SETUP WIZARD & ESP32 FLASHING ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+// Helper to get local IP address
+const getLocalIP = () => {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+      if (net.family === 'IPv4' && !net.internal && net.address.startsWith('192.168.')) {
+        return net.address;
+      }
+    }
+  }
+  return '192.168.1.100'; // Fallback
+};
+
+app.get('/api/setup/info', (req, res) => {
+  res.json({ localIp: getLocalIP() });
+});
+
+app.post('/api/setup/flash', (req, res) => {
+  const { ssid, password, comPort } = req.body;
+  if (!ssid || !password || !comPort) return res.status(400).json({ error: 'Missing parameters' });
+
+  const localIp = getLocalIP();
+  const serverUrl = `http://${localIp}:${process.env.PORT || 3001}`;
+  const apiKey = process.env.BOARD_API_KEY || 'LITRO_SECURE_KEY_2024';
+
+  const boardDir = path.join(baseDir, 'esp32-board');
+  const headerPath = path.join(boardDir, 'main', 'wifi_http.h');
+
+  if (!fs.existsSync(headerPath)) {
+    return res.status(400).json({ error: `Cannot find esp32-board folder at ${boardDir}` });
+  }
+
+  try {
+    // 1. Read existing wifi_http.h
+    let content = fs.readFileSync(headerPath, 'utf8');
+
+    // 2. Replace macros using regex
+    content = content.replace(/#define WIFI_SSID\s+".*"/, `#define WIFI_SSID           "${ssid}"`);
+    content = content.replace(/#define WIFI_PASSWORD\s+".*"/, `#define WIFI_PASSWORD       "${password}"`);
+    content = content.replace(/#define SERVER_URL\s+".*"/, `#define SERVER_URL          "${serverUrl}"`);
+    content = content.replace(/#define BOARD_API_KEY\s+".*"/, `#define BOARD_API_KEY       "${apiKey}"`);
+
+    // 3. Write it back
+    fs.writeFileSync(headerPath, content, 'utf8');
+
+    // 4. Start flashing process (spawn idf.py)
+    // Send immediate response so client can connect to Socket for logs
+    res.json({ success: true, message: 'Configuration updated. Flashing started.' });
+
+    io.emit('flash_log', `\n[SETUP] Configuration saved to wifi_http.h`);
+    io.emit('flash_log', `[SETUP] Local Server IP set to: ${serverUrl}`);
+    io.emit('flash_log', `[SETUP] Starting ESP-IDF Flasher on port ${comPort}...\n`);
+
+    const flashProcess = spawn('idf.py', ['build', 'flash', '-p', comPort], { cwd: boardDir, shell: true });
+
+    flashProcess.stdout.on('data', (data) => {
+      io.emit('flash_log', data.toString());
+    });
+
+    flashProcess.stderr.on('data', (data) => {
+      io.emit('flash_log', data.toString());
+    });
+
+    flashProcess.on('close', (code) => {
+      if (code === 0) {
+        io.emit('flash_log', `\n[SUCCESS] Board flashed successfully! You can now unplug it.`);
+        io.emit('flash_done', { success: true });
+      } else {
+        io.emit('flash_log', `\n[ERROR] Flashing failed with exit code ${code}. Make sure ESP-IDF is installed and the COM port is correct.`);
+        io.emit('flash_done', { success: false });
+      }
+    });
+
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // ═══════════════════════════════════════════════════════════════
 // EXPRESS + SOCKET.IO

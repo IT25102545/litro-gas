@@ -5,6 +5,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import SupervisorDashboard from './pages/SupervisorDashboard';
 import DigitalDisplay from './pages/DigitalDisplay';
 import SuperAdmin from './pages/SuperAdmin';
+import SetupWizard from './pages/SetupWizard';
 import TopNav from './components/TopNav';
 import './App.css';
 
@@ -83,6 +84,9 @@ function App() {
           
           {/* Super Admin — standalone dark mode page */}
           <Route path="/superadmin" element={<SuperAdmin />} />
+
+          {/* Setup Wizard */}
+          <Route path="/setup" element={<SetupWizard />} />
 
           {/* Admin view — with TopNav wrapper */}
           <Route path="*" element={
