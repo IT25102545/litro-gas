@@ -322,11 +322,10 @@ app.get('/api/setup/info', (req, res) => {
 });
 
 app.post('/api/setup/flash', (req, res) => {
-  const { ssid, password, comPort } = req.body;
-  if (!ssid || !password || !comPort) return res.status(400).json({ error: 'Missing parameters' });
+  const { ssid, password, comPort, serverIp } = req.body;
+  if (!ssid || !password || !comPort || !serverIp) return res.status(400).json({ error: 'Missing parameters' });
 
-  const localIp = getLocalIP();
-  const serverUrl = `http://${localIp}:${process.env.PORT || 3001}`;
+  const serverUrl = `http://${serverIp}:${process.env.PORT || 3001}`;
   const apiKey = process.env.BOARD_API_KEY || 'LITRO_SECURE_KEY_2024';
 
   const boardDir = path.join(baseDir, 'esp32-board');
