@@ -2,3 +2,10 @@ node_modules
 .env
 .DS_Store
 *.log
+
+# Production — never commit these
+litro_gas.db
+litro_gas.db-shm
+litro_gas.db-wal
+logs/
+dist/
