@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, RefreshCw, Server, Activity, Database, GitBranch, Terminal } from 'lucide-react';
+import { Shield, RefreshCw, Server, Activity, Database, GitBranch, Terminal, Key } from 'lucide-react';
 
 export default function SuperAdmin() {
   const [isAuthenticated, setIsAuthenticated] = useState(sessionStorage.getItem('superAuth') === 'true');
@@ -9,6 +9,18 @@ export default function SuperAdmin() {
   
   const [updateStatus, setUpdateStatus] = useState('');
   const [health, setHealth] = useState(null);
+  const [license, setLicense] = useState(null);
+
+  const fetchLicense = () => {
+    fetch('/api/superadmin/license', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auth: 'litro2024super' })
+    })
+    .then(res => res.json())
+    .then(data => setLicense(data))
+    .catch(() => {});
+  };
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -16,6 +28,8 @@ export default function SuperAdmin() {
         .then(res => res.json())
         .then(data => setHealth(data))
         .catch(err => console.error(err));
+      
+      fetchLicense();
     }
   }, [isAuthenticated]);
 
@@ -40,6 +54,24 @@ export default function SuperAdmin() {
     } catch (e) {
       alert('Update trigger failed.');
       setUpdateStatus('');
+    }
+  };
+
+  const handleUpdateLicense = async (action) => {
+    if (!window.confirm(`Are you sure you want to apply: ${action}?`)) return;
+    try {
+      const res = await fetch('/api/superadmin/license/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth: 'litro2024super', action })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLicense(data.status);
+        alert('License updated successfully.');
+      }
+    } catch (e) {
+      alert('License update failed.');
     }
   };
 
@@ -142,6 +174,37 @@ export default function SuperAdmin() {
             {updateStatus === 'updating' ? 'Executing Deployment Pipeline...' : 'Fetch & Deploy from GitHub'}
           </button>
         </div>
+
+        {license && (
+          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '16px', padding: '32px', marginTop: '24px' }}>
+            <h2 style={{ fontSize: '20px', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Key size={20} color="#eab308" /> License & Subscription Management
+            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '20px', borderRadius: '12px', border: '1px solid #334155', marginBottom: '24px' }}>
+              <div>
+                <div style={{ fontSize: '13px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>Current Status</div>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: license.active ? '#22c55e' : '#ef4444', marginTop: '4px' }}>
+                  {license.message}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '13px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px' }}>License Type</div>
+                <div style={{ fontSize: '18px', fontWeight: 600, color: 'white', marginTop: '4px', textTransform: 'capitalize' }}>
+                  {license.type} {license.type === 'trial' && `(Expires: ${new Date(license.expiry).toLocaleDateString()})`}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <button onClick={() => handleUpdateLicense('extend_trial')} style={{ flex: 1, padding: '16px', background: '#334155', border: 'none', borderRadius: '12px', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#475569'} onMouseLeave={e => e.currentTarget.style.background = '#334155'}>
+                Extend Trial (14 Days)
+              </button>
+              <button onClick={() => handleUpdateLicense('lifetime')} style={{ flex: 1, padding: '16px', background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', borderRadius: '12px', color: 'white', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = 0.9} onMouseLeave={e => e.currentTarget.style.opacity = 1}>
+                Activate Lifetime License
+              </button>
+            </div>
+          </div>
+        )}
 
         <style>{`
           .spin { animation: spin 1s linear infinite; }

@@ -12,6 +12,8 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
+const baseDir    = typeof process.pkg !== 'undefined' ? path.dirname(process.execPath) : __dirname;
+dotenv.config({ path: path.join(baseDir, '.env') });
 const isProd     = process.env.NODE_ENV === 'production';
 
 const app = express();
@@ -22,7 +24,7 @@ app.use(express.json());
 // DATABASE — SQLite via better-sqlite3
 // All data is saved to disk. Server restarts never lose data.
 // ═══════════════════════════════════════════════════════════════
-const db = new Database(path.join(__dirname, 'litro_gas.db'));
+const db = new Database(path.join(baseDir, 'litro_gas.db'));
 db.pragma('journal_mode = WAL');   // Better concurrent read performance
 db.pragma('foreign_keys = ON');
 
@@ -68,7 +70,25 @@ db.exec(`
     source          TEXT,
     timestamp       DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
 `);
+
+// Initialize Trial Expiry if not exists
+const trialSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('expiry_date');
+if (!trialSetting) {
+  // Set default trial to 14 days from now
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + 14);
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('expiry_date', expiryDate.toISOString());
+}
+const licenseTypeSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('license_type');
+if (!licenseTypeSetting) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('license_type', 'trial');
+}
 
 // Prepare statements (compiled once, reused — best practice for performance)
 const stmts = {
@@ -224,9 +244,66 @@ const calculateStats = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// LICENSE MIDDLEWARE & ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+const checkLicense = () => {
+  const licenseType = db.prepare('SELECT value FROM settings WHERE key = ?').get('license_type').value;
+  if (licenseType === 'lifetime') return { active: true, type: 'lifetime', message: 'System Licensed' };
+  
+  const expiryStr = db.prepare('SELECT value FROM settings WHERE key = ?').get('expiry_date').value;
+  const expiry = new Date(expiryStr);
+  const now = new Date();
+  
+  if (now > expiry) {
+    return { active: false, type: 'trial', expiry, message: 'Trial Expired' };
+  }
+  return { active: true, type: 'trial', expiry, message: 'Trial Active' };
+};
+
+app.get('/api/license/status', (req, res) => {
+  res.json(checkLicense());
+});
+
+app.post('/api/superadmin/license', (req, res) => {
+  const { auth } = req.body;
+  if (auth !== 'litro2024super') return res.status(403).json({ error: 'Unauthorized' });
+  
+  const status = checkLicense();
+  res.json(status);
+});
+
+app.post('/api/superadmin/license/update', (req, res) => {
+  const { auth, action } = req.body;
+  if (auth !== 'litro2024super') return res.status(403).json({ error: 'Unauthorized' });
+  
+  if (action === 'lifetime') {
+    db.prepare('UPDATE settings SET value = ? WHERE key = ?').run('lifetime', 'license_type');
+  } else if (action === 'extend_trial') {
+    db.prepare('UPDATE settings SET value = ? WHERE key = ?').run('trial', 'license_type');
+    const expiry = new Date();
+    expiry.setDate(expiry.getDate() + 14); // extend 14 days from now
+    db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(expiry.toISOString(), 'expiry_date');
+  }
+  
+  // Broadcast to all clients to refresh license status
+  io.emit('licenseUpdated', checkLicense());
+  res.json({ success: true, status: checkLicense() });
+});
+
+// Middleware to block board counting if license is expired
+const requireLicenseForBoard = (req, res, next) => {
+  const status = checkLicense();
+  if (!status.active) {
+    console.log('[LICENSE ERROR] Board attempted to count but system is locked.');
+    return res.status(403).send("LICENSE_EXPIRED");
+  }
+  next();
+};
+
+// ═══════════════════════════════════════════════════════════════
 // EXPRESS + SOCKET.IO
 // ═══════════════════════════════════════════════════════════════
-const distPath = path.join(__dirname, 'dist');
+const distPath = path.join(baseDir, 'dist');
 app.use(express.static(distPath));
 
 const httpServer = createServer(app);
@@ -344,8 +421,8 @@ io.on('connection', (socket) => {
 // ═══════════════════════════════════════════════════════════════
 // REST API — ESP32 Sensor Endpoints (API key protected)
 // ═══════════════════════════════════════════════════════════════
-app.use('/api/sensor', requireBoardApiKey);
-app.use('/api/gate', requireBoardApiKey);
+app.use('/api/sensor', requireLicenseForBoard, requireBoardApiKey);
+app.use('/api/gate', requireLicenseForBoard, requireBoardApiKey);
 
 app.post('/api/sensor/count', (req, res) => {
   const { bayId, count } = req.body;
@@ -441,7 +518,9 @@ app.post('/api/admin/system-update', (req, res) => {
 });
 
 // ── Catch-all for React Router ──────────────────────────────────
-app.get(/^.*$/, (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
+});
 
 // ═══════════════════════════════════════════════════════════════
 // GRACEFUL SHUTDOWN — saves DB before exit
